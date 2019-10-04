@@ -2,8 +2,8 @@ package hbcontrol
 
 import (
 	"fmt"
-	"hbProject/hb/hbMaps"
-	"hbProject/hb/hbws"
+	"github.com/cngobd/hbMaps"
+	"github.com/cngobd/hbws"
 	"log"
 	"time"
 )

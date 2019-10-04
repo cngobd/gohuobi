@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"golang.org/x/net/websocket"
-	"hbProject/hb/hbMaps"
+	"github.com/cngobd/hbMaps"
 	"io/ioutil"
 	"log"
 	"reflect"

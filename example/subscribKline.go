@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"hbProject/hb/hbcontrol"
-	"hbProject/hb/hbws"
+	"github.com/cngobd/gohuobi/hbcontrol"
+	"github.com/cngobd/hbws"
 )
 func printKline(resp hbws.UpdateKline) {
 	fmt.Printf("tradePare:%v, amount:%v, open:%v, close:%v\n",
