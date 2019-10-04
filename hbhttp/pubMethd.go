@@ -1,4 +1,4 @@
-package publicMethod
+package hbhttp
 
 import (
 	"encoding/json"

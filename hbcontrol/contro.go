@@ -1,9 +1,9 @@
-package controller
+package hbcontrol
 
 import (
 	"fmt"
 	"hbProject/hb/hbMaps"
-	"hbProject/hb/websocketServer"
+	"hbProject/hb/hbws"
 	"log"
 	"time"
 )
@@ -20,11 +20,11 @@ func init() {
 	/*go websocketServer.StartAWebSocketClient("ws3")
 	time.Sleep(time.Second)
 	go runSubBBO("ws3")*/
-	runAWork("ws1", &websocketServer.WsReqPRM{
+	RunAWork(&hbws.WsReq{
 		Detail:    "",
-		Action:    "sub",
+		Action:    hbws.Subscribe,
 		TradePare: "btcusdt",
-		Kind:      "depth",
+		Kind:      hbws.Kline,
 		Parameter: "step0",
 	})
 }
@@ -33,47 +33,19 @@ func init() {
 //and start listen to the RespCh, print the index from
 //this channel
 
-func runWs(wsName string) {
-	fmt.Printf("listen %v start...\n",wsName)
-	for {
-		load, ok := hbMaps.WSMap.Load(wsName)
-		if !ok {
-			log.Print("not find in the map")
-			time.Sleep(time.Second)
-			continue
-		} else {
-			result := load.(*websocketServer.WsWorker)
-			//[tradePare, kind, parameter]
-			//kind : 1.kline 2.depth 3.trade 4.detail
-			//parameter: 1.1min... 2.step0... 3.detail 4.nil
-			fmt.Println("start send to chan")
-			reqwork := new(websocketServer.WsReqPRM)
-			reqwork.Action = "sub"
-			reqwork.TradePare = "btcusdt"
-			reqwork.Kind = "kline"
-			reqwork.Parameter = "1min"
-			result.ReqCh <- reqwork
 
-			go listen(result.RespCh)
-			break
-		}
-	}
-}
-func runSubBBO(wsName string) {
-
-}
-
-func runAWork(workName string, req *websocketServer.WsReqPRM) {
-	go websocketServer.StartAWebSocketClient(workName)
+func RunAWork(req *hbws.WsReq) chan interface{}{
+	workName := fmt.Sprintf("%v%v", req.Action, req.TradePare)
+	go hbws.StartAWebSocketClient(workName)
 	switch req.Action {
 	case "sub":
-		runASub(workName, req)
+		return runASub(workName, req)
 	case "req":
-		runReqOnce(workName, req)
+		return runReqOnce(workName, req)
 	}
-
+	return nil
 }
-func runASub(wsName string, param *websocketServer.WsReqPRM) {
+func runASub(wsName string, param *hbws.WsReq) chan interface{}{
 	fmt.Printf("start a new work :%v, :%v\n",wsName, param)
 	for {
 		load, ok := hbMaps.WSMap.Load(wsName)
@@ -82,15 +54,15 @@ func runASub(wsName string, param *websocketServer.WsReqPRM) {
 			time.Sleep(time.Second)
 			continue
 		} else {
-			result := load.(*websocketServer.WsWorker)
+			result := load.(*hbws.WsWorker)
 			result.ReqCh <- param
 
-			go listen(result.RespCh)
-			break
+			//go listen(result.RespCh)
+			return result.RespCh
 		}
 	}
 }
-func runReqOnce(wsName string, param *websocketServer.WsReqPRM) {
+func runReqOnce(wsName string, param *hbws.WsReq) chan interface{}{
 	fmt.Printf("start a new work :%v, :%v\n",wsName, param)
 	for {
 		load, ok := hbMaps.WSMap.Load(wsName)
@@ -99,7 +71,7 @@ func runReqOnce(wsName string, param *websocketServer.WsReqPRM) {
 			time.Sleep(time.Second)
 			continue
 		} else {
-			result := load.(*websocketServer.WsWorker)
+			result := load.(*hbws.WsWorker)
 			go listen(result.RespCh)
 		mark1:
 			//[tradePare, kind, parameter]
@@ -126,18 +98,18 @@ func listen(ch chan interface{}){
 			case []string :
 				res := x.([]string)
 				fmt.Printf("server status index return:%v\n",res)
-			case websocketServer.UpdateKline:
-				get := x.(websocketServer.UpdateKline)
+			case hbws.UpdateKline:
+				get := x.(hbws.UpdateKline)
 				print(get)
-			case websocketServer.UpdateTradeDetail:
-				get := x.(websocketServer.UpdateTradeDetail)
+			case hbws.UpdateTradeDetail:
+				get := x.(hbws.UpdateTradeDetail)
 				printTradeDetail(get)
-			case websocketServer.UpdateMarketDetail:
+			case hbws.UpdateMarketDetail:
 
-			case websocketServer.UpdateDepth:
-				printDepth(x.(websocketServer.UpdateDepth))
-			case websocketServer.UpdateBBO:
-				printBBO(x.(websocketServer.UpdateBBO))
+			case hbws.UpdateDepth:
+				printDepth(x.(hbws.UpdateDepth))
+			case hbws.UpdateBBO:
+				printBBO(x.(hbws.UpdateBBO))
 			}
 
 		default:
@@ -150,15 +122,15 @@ func listen(ch chan interface{}){
 	}
 }
 
-func printDepth(get websocketServer.UpdateDepth) {
+func printDepth(get hbws.UpdateDepth) {
 	fmt.Printf("sub depth resp: \n bid:%v \n ask:%v\n", get.Bids[:3],get.Asks[:3])
 	fmt.Println("-----------")
 }
-func printBBO(get websocketServer.UpdateBBO) {
+func printBBO(get hbws.UpdateBBO) {
 	fmt.Println("sub bbo resp:", get)
 }
 //print the info from the RespCH
-func print(get websocketServer.UpdateKline) {
+func print(get hbws.UpdateKline) {
 	fmt.Printf("tradepare:%v\n",get.TradePare)
 	fmt.Printf("id:%v\n", get.Id)
 	fmt.Printf("amount:%v\n",get.Amount)
@@ -170,7 +142,7 @@ func print(get websocketServer.UpdateKline) {
 	fmt.Printf("volum:%v\n",get.Vol)
 	fmt.Printf("%v\n","---------")
 }
-func printTradeDetail(get websocketServer.UpdateTradeDetail) {
+func printTradeDetail(get hbws.UpdateTradeDetail) {
 	fmt.Println("data length", len(get.Data))
 	fmt.Printf("data: %v, %v, %v \n",get.Data[len(get.Data)-1].Amount,get.Data[len(get.Data)-1].Price,get.Data[len(get.Data)-1].Direction)
 	fmt.Printf("data: %v, %v, %v \n",get.Data[len(get.Data)-2].Amount,get.Data[len(get.Data)-2].Price,get.Data[len(get.Data)-2].Direction)

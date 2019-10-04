@@ -1,7 +1,17 @@
-package websocketServer
+package hbws
 
+var (
+	Subscribe = "sub"
+	Request = "req"
+)
+const (
+	Kline = "kline"
+	Depth = "depth"
+	Trade = "trade"
+	Detail = "detail"
+)
 //
-type WsReqPRM struct {
+type WsReq struct {
 	Detail string //detail of the market
 	Action string //sub, unsub, req, stop
 	TradePare string //btcusdt, ethusdt...

@@ -1,4 +1,4 @@
-package websocketServer
+package hbws
 
 import (
 	"bytes"
@@ -61,19 +61,19 @@ func StartAWebSocketClient(WSName string) {
 	for {
 		select {
 		case msg := <-newWorker.ReqCh:
-			switch msg.(*WsReqPRM).Action {
+			switch msg.(*WsReq).Action {
 			//subscription a topic
 			case "sub":
 				//subscribe a new topic
-				newWorker.subNewTopic(msg.(*WsReqPRM))
+				newWorker.subNewTopic(msg.(*WsReq))
 
 			//unsubscription the topic
 			case "unsub":
-				newWorker.unsubTopic(msg.(*WsReqPRM))
+				newWorker.unsubTopic(msg.(*WsReq))
 
 			//request the index
 			case "req":
-				newWorker.requestDataOnce(msg.(*WsReqPRM))
+				newWorker.requestDataOnce(msg.(*WsReq))
 			case "stop":
 				return
 			}
@@ -191,7 +191,7 @@ func (w *WsWorker) pong(index []byte) {
 }
 
 //subscribe a new topic, topic parameter: []string(tradePare, kind, parameter)
-func (w *WsWorker) subNewTopic(topic *WsReqPRM) {
+func (w *WsWorker) subNewTopic(topic *WsReq) {
 	//[tradePare, kind, parameter]
 	//kind : 1.kline 2.depth 3.trade 4.detail
 	//parameter: 1.1min... 2.step0... 3.detail 4.nil
@@ -235,12 +235,12 @@ func (w *WsWorker) subNewTopic(topic *WsReqPRM) {
 }
 
 //
-func (w *WsWorker) unsubTopic(topic *WsReqPRM) {
+func (w *WsWorker) unsubTopic(topic *WsReq) {
 
 }
 
 //request data
-func (w *WsWorker) requestDataOnce(topic *WsReqPRM) {
+func (w *WsWorker) requestDataOnce(topic *WsReq) {
 	//[tradePare, kind, parameter]
 	//kind : 1.kline 2.depth 3.trade 4.detail
 	//parameter: 1.1min... 2.step0... 3.detail 4.nil
