@@ -1,152 +1,116 @@
 package hbcontrol
 
 import (
+	"errors"
 	"fmt"
-	"github.com/cngobd/hbMaps"
-	"github.com/cngobd/hbws"
 	"log"
 	"time"
+
+	"github.com/cngobd/gohuobi/hbws"
+	"github.com/cngobd/gohuobi/hbws/Subscribe"
+	"github.com/cngobd/gohuobi/hbws/Request"
+
 )
 
-func init() {
-	/*go websocketServer.StartAWebSocketClient("ws1")
-	time.Sleep(time.Second)
-	go runWs("ws1")*/
-
-	/*go websocketServer.StartAWebSocketClient("ws2")
-	time.Sleep(time.Second)
-	go runReqOnce("ws2")*/
-
-	/*go websocketServer.StartAWebSocketClient("ws3")
-	time.Sleep(time.Second)
-	go runSubBBO("ws3")*/
-	RunAWork(&hbws.WsReq{
-		Detail:    "",
-		Action:    hbws.Subscribe,
-		TradePare: "btcusdt",
-		Kind:      hbws.Kline,
-		Parameter: "step0",
-	})
-}
 
 //this is a test function, send a request to the ReqCh
 //and start listen to the RespCh, print the index from
 //this channel
 
+func RunSubWork(param interface{}) (chan interface{}, error){
 
-func RunAWork(req *hbws.WsReq) chan interface{}{
-	workName := fmt.Sprintf("%v%v", req.Action, req.TradePare)
-	go hbws.StartAWebSocketClient(workName)
-	switch req.Action {
-	case "sub":
-		return runASub(workName, req)
-	case "req":
-		return runReqOnce(workName, req)
+	var workName string
+
+	fmt.Printf("start a new sub work :%v\n",workName)
+	newWorker := new(hbws.WsWorker)
+	newWorker.ReqCh = make(chan hbws.ReqMessage,1000)
+	newWorker.RespCh = make(chan interface{},1000)
+	go hbws.StartAWebSocketClient(newWorker)
+	command := "sub"
+	topic := ""
+	switch param.(type) {
+	case Subscribe.Kline:
+		tp := param.(Subscribe.Kline)
+		topic = fmt.Sprintf("market.%v.kline.%vmin",getTradePair(tp.TradePare), tp.Period)
+
+
+	case Subscribe.TradeDetail:
+		tp := param.(Subscribe.TradeDetail)
+		topic = fmt.Sprintf("market.%v.trade.detail",getTradePair(tp.TradePare))
+	case Subscribe.Depth:
+		tp := param.(Subscribe.Depth)
+		topic = fmt.Sprintf("market.%v.depth.step%v",getTradePair(tp.TradePare),tp.Step)
+	case Subscribe.BBO:
+		tp := param.(Subscribe.BBO)
+		topic = fmt.Sprintf("market.%v.bbo",getTradePair(tp.TradePare))
+	case Subscribe.MarketDetail:
+		tp := param.(Subscribe.MarketDetail)
+		topic = fmt.Sprintf("market.%v.detail",getTradePair(tp.TradePare))
+	default:
+		return nil, errors.New("wrong type, start fail")
 	}
-	return nil
+	reqMsg := hbws.ReqMessage{
+		Command: command,
+		Topic:   topic,
+
+	}
+	newWorker.ReqCh <- reqMsg
+	return newWorker.RespCh, nil
+
 }
-func runASub(wsName string, param *hbws.WsReq) chan interface{}{
-	fmt.Printf("start a new work :%v, :%v\n",wsName, param)
+//request data 10times per second automatically
+func RunReqWork(param interface{}) (chan interface{}, error){
+	newWorker := new(hbws.WsWorker)
+	newWorker.ReqCh = make(chan hbws.ReqMessage,1000)
+	newWorker.RespCh = make(chan interface{},1000)
+	go hbws.StartAWebSocketClient(newWorker)
+	command := "req"
+	topic := ""
+	switch param.(type) {
+	case Request.Kline:
+		tp := param.(Request.Kline)
+		topic = fmt.Sprintf("market.%v.kline.%vmin",getTradePair(tp.TradePare), tp.Period)
+
+	case Request.TradeDetail:
+		tp := param.(Request.TradeDetail)
+		topic = fmt.Sprintf("market.%v.trade.detail",getTradePair(tp.TradePare))
+	case Request.Depth:
+		tp := param.(Request.Depth)
+		topic = fmt.Sprintf("market.%v.depth.step%v",getTradePair(tp.TradePare),tp.Step)
+	case Request.BBO:
+		tp := param.(Request.BBO)
+		topic = fmt.Sprintf("market.%v.bbo",getTradePair(tp.TradePare))
+	case Request.MarketDetail:
+		tp := param.(Request.MarketDetail)
+		topic = fmt.Sprintf("market.%v.detail",getTradePair(tp.TradePare))
+	default:
+		return nil, errors.New("wrong type, start fail")
+	}
+	reqMsg := hbws.ReqMessage{
+		Command: command,
+		Topic:   topic,
+
+	}
+	go requestPolling(newWorker.ReqCh, reqMsg)
+	return newWorker.RespCh, nil
+}
+
+func getTradePair(reqT interface{}) string {
+	switch reqT.(type) {
+	case Request.TradePare:
+		req := reqT.(Request.TradePare)
+		return fmt.Sprintf("%v%v",req.Coin, req.BaseCoin)
+	case Subscribe.TradePare:
+		req := reqT.(Subscribe.TradePare)
+		return fmt.Sprintf("%v%v",req.Coin, req.BaseCoin)
+	default:
+		log.Println("wrong trade pare type")
+		return ""
+	}
+}
+func requestPolling(reqCH chan hbws.ReqMessage, reqMsg hbws.ReqMessage) {
 	for {
-		load, ok := hbMaps.WSMap.Load(wsName)
-		if !ok {
-			log.Print("check the network")
-			time.Sleep(time.Second)
-			continue
-		} else {
-			result := load.(*hbws.WsWorker)
-			result.ReqCh <- param
-
-			//go listen(result.RespCh)
-			return result.RespCh
-		}
+		reqCH <- reqMsg
+		time.Sleep(time.Second/10)
 	}
-}
-func runReqOnce(wsName string, param *hbws.WsReq) chan interface{}{
-	fmt.Printf("start a new work :%v, :%v\n",wsName, param)
-	for {
-		load, ok := hbMaps.WSMap.Load(wsName)
-		if !ok {
-			log.Print("check the network...")
-			time.Sleep(time.Second)
-			continue
-		} else {
-			result := load.(*hbws.WsWorker)
-			go listen(result.RespCh)
-		mark1:
-			//[tradePare, kind, parameter]
-			//kind : 1.kline 2.depth 3.trade 4.detail
-			//parameter: 1.1min... 2.step0... 3.detail 4.nil
-			//fmt.Println("start send to chan")
-
-			result.ReqCh <- param
-			time.Sleep(time.Second/10)
-			goto mark1
-			//result.ReqCh <- []string{"sub","btcusdt","kline","1min"}
-		}
-	}
-}
-var count int
-var lastTime = time.Now()
-//listen to the RespCH
-func listen(ch chan interface{}){
-	for {
-		select {
-		case x := <-ch :
-			count ++
-			switch x.(type) {
-			case []string :
-				res := x.([]string)
-				fmt.Printf("server status index return:%v\n",res)
-			case hbws.UpdateKline:
-				get := x.(hbws.UpdateKline)
-				print(get)
-			case hbws.UpdateTradeDetail:
-				get := x.(hbws.UpdateTradeDetail)
-				printTradeDetail(get)
-			case hbws.UpdateMarketDetail:
-
-			case hbws.UpdateDepth:
-				printDepth(x.(hbws.UpdateDepth))
-			case hbws.UpdateBBO:
-				printBBO(x.(hbws.UpdateBBO))
-			}
-
-		default:
-			if time.Since(lastTime) > 1*time.Second {
-				log.Println("count:",count)
-				lastTime = time.Now()
-				count = 0
-			}
-		}
-	}
-}
-
-func printDepth(get hbws.UpdateDepth) {
-	fmt.Printf("sub depth resp: \n bid:%v \n ask:%v\n", get.Bids[:3],get.Asks[:3])
-	fmt.Println("-----------")
-}
-func printBBO(get hbws.UpdateBBO) {
-	fmt.Println("sub bbo resp:", get)
-}
-//print the info from the RespCH
-func print(get hbws.UpdateKline) {
-	fmt.Printf("tradepare:%v\n",get.TradePare)
-	fmt.Printf("id:%v\n", get.Id)
-	fmt.Printf("amount:%v\n",get.Amount)
-	fmt.Printf("count:%v\n",get.Count)
-	fmt.Printf("open:%v\n",get.Open)
-	fmt.Printf("close:%v\n",get.Close)
-	fmt.Printf("high:%v\n",get.High)
-	fmt.Printf("low:%v\n",get.Low)
-	fmt.Printf("volum:%v\n",get.Vol)
-	fmt.Printf("%v\n","---------")
-}
-func printTradeDetail(get hbws.UpdateTradeDetail) {
-	fmt.Println("data length", len(get.Data))
-	fmt.Printf("data: %v, %v, %v \n",get.Data[len(get.Data)-1].Amount,get.Data[len(get.Data)-1].Price,get.Data[len(get.Data)-1].Direction)
-	fmt.Printf("data: %v, %v, %v \n",get.Data[len(get.Data)-2].Amount,get.Data[len(get.Data)-2].Price,get.Data[len(get.Data)-2].Direction)
-	fmt.Printf("data: %v, %v, %v \n",get.Data[len(get.Data)-3].Amount,get.Data[len(get.Data)-3].Price,get.Data[len(get.Data)-3].Direction)
-	fmt.Println("ts:",time.Now().Second())
-	fmt.Println("------")
 }

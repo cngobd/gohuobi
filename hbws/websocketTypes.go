@@ -1,23 +1,25 @@
 package hbws
 
 var (
-	Subscribe = "sub"
-	Request = "req"
+	Sub = "sub"
+	Req = "req"
 )
+
 const (
-	Kline = "kline"
-	Depth = "depth"
-	Trade = "trade"
+	Kline  = "kline"
+	Depth  = "depth"
+	Trade  = "trade"
 	Detail = "detail"
+	BBO    = "bbo"
 )
-//
-type WsReq struct {
-	Detail string //detail of the market
-	Action string //sub, unsub, req, stop
-	TradePare string //btcusdt, ethusdt...
-	Kind      string //kline, depth, trade, detail
-	Parameter string //1.1min... 2.step0... 3.detail 4.nil
-}
+
+
+
+
+
+
+
+
 
 //this struct helps to divide the returned data into sub or req
 type selectMsg1 struct {
@@ -36,8 +38,8 @@ type subStatus struct {
 }
 type reqStatus struct {
 	Status string `json:"status"`
-	Rep string `json:"rep"`
-	Tick []byte `json:"tick"`
+	Rep    string `json:"rep"`
+	Tick   []byte `json:"tick"`
 }
 type unSubStatus struct {
 	Id       string `json:"id"`
@@ -45,13 +47,17 @@ type unSubStatus struct {
 	Unsubbed string `json:"unsubbed"`
 }
 type updateDataSelect struct {
-	Ch string `json:"ch"`
-	Rep string `json:"rep"`
+	Ch   string      `json:"ch"`
+	Rep  string      `json:"rep"`
 	Tick interface{} `json:"tick"`
 }
 
 type UpdateKlinePre struct {
 	Tick UpdateKline `json:"tick"`
+	Data []UpdateKline `json:"data"`
+}
+type RequestKlinePre struct {
+	Data []UpdateKline `json:"data"`
 }
 type UpdateKline struct {
 	TradePare string
@@ -66,12 +72,12 @@ type UpdateKline struct {
 	Vol       float64 `json:"vol"`    //the trade sum
 }
 type UpdateDepthPre struct {
-	Tick UpdateDepth `json:"tick"`
+	Data UpdateDepth `json:"data"`
 }
 type UpdateDepth struct {
 	TradePare string
 	Bids      [][]float64 `json:"bids"`
-	Asks       [][]float64 `json:"asks"`
+	Asks      [][]float64 `json:"asks"`
 }
 type UpdateTradeDetailPre struct {
 	Tick UpdateTradeDetail `json:"tick"`
@@ -93,14 +99,14 @@ type UpdateMarketDetailPre struct {
 }
 type UpdateMarketDetail struct {
 	TradePare string
-	Ts     int     `json:"ts"`
-	Amount float64 `json:"amount"`
-	Count  int     `json:"count"`
-	Open   float64 `json:"open"`
-	Close  float64 `json:"close"`
-	High   float64 `json:"high"`
-	Low    float64 `json:"low"`
-	Vol    float64 `json:"vol"`
+	Ts        int     `json:"ts"`
+	Amount    float64 `json:"amount"`
+	Count     int     `json:"count"`
+	Open      float64 `json:"open"`
+	Close     float64 `json:"close"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Vol       float64 `json:"vol"`
 }
 
 type UpdataBboPre struct {
@@ -108,21 +114,17 @@ type UpdataBboPre struct {
 }
 type UpdateBBO struct {
 	TradePare string
-	QuoteTime int64 `json:"quoteTime"`
-	Bid float32 `json:"bid"`
-	BidSize float32 `json:"bidSize"`
-	Ask float32 `json:"ask"`
-	AskSize float32 `json:"askSize"`
+	Symbol    string  `json:"symbol"`
+	QuoteTime int64   `json:"quoteTime"`
+	Bid       float32 `json:"bid"`
+	BidSize   float32 `json:"bidSize"`
+	Ask       float32 `json:"ask"`
+	AskSize   float32 `json:"askSize"`
 }
-type RequestOnce struct {
-
-}
-
-
 
 type RespTradeDetail struct {
-
 }
+
 /*
 //sub status return
 {

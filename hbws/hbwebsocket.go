@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"golang.org/x/net/websocket"
-	"github.com/cngobd/hbMaps"
 	"io/ioutil"
 	"log"
 	"reflect"
@@ -22,12 +21,16 @@ var (
 
 type WsWorker struct {
 	wsName    string
-	client    *websocket.Conn
-	ReqCh     chan interface{}
+	Client    *websocket.Conn
+	ReqCh     chan ReqMessage
 	RespCh    chan interface{}
+	StrChan chan interface{}
 	subTopics []*subTopic  //the topic subscribed currently
 }
-
+type ReqMessage struct {
+	Command string
+	Topic string
+}
 //this is a subscribe work instance
 type subTopic struct {
 	subbed string
@@ -37,43 +40,33 @@ type subTopic struct {
 }
 
 //start a websocket client and listen to the chan of ReqCh
-func StartAWebSocketClient(WSName string) {
-	defer fmt.Printf("%v closed\n",WSName)
-
-	fmt.Printf("%v start...\n",WSName)
-	newWorker := new(WsWorker)
-	newWorker.ReqCh = make(chan interface{})
-	newWorker.RespCh = make(chan interface{})
-	newWorker.wsName = WSName
+func StartAWebSocketClient(newWorker *WsWorker) {
+	defer fmt.Printf("closed")
+	//log.Println("ws client start")
 	var err error
-	newWorker.client, err = websocket.Dial(url, "", origin)
-	fmt.Println("after dial")
-	defer newWorker.client.Close()
+	newWorker.Client, err = websocket.Dial(url, "", origin)
+	defer newWorker.Client.Close()
 	if err != nil {
 		log.Print(err)
 		return
 	}
-	fmt.Println("start store")
-
-	hbMaps.WSMap.Store(newWorker.wsName, newWorker)
+	fmt.Println("dial success, start working")
 
 	go newWorker.messageHandle()
 	for {
 		select {
-		case msg := <-newWorker.ReqCh:
-			switch msg.(*WsReq).Action {
+		case msg := <- newWorker.ReqCh:
+			switch msg.Command {
 			//subscription a topic
 			case "sub":
 				//subscribe a new topic
-				newWorker.subNewTopic(msg.(*WsReq))
-
+				newWorker.subNewTopic(msg.Topic)
 			//unsubscription the topic
 			case "unsub":
-				newWorker.unsubTopic(msg.(*WsReq))
-
+				newWorker.unsubTopic(msg.Topic)
 			//request the index
 			case "req":
-				newWorker.requestDataOnce(msg.(*WsReq))
+				newWorker.requestDataOnce(msg.Topic)
 			case "stop":
 				return
 			}
@@ -89,7 +82,7 @@ func (w *WsWorker) messageHandle() {
 	for {
 		mark1:
 		msg := make([]byte, 5120)
-		n, _ := w.client.Read(msg)
+		n, _ := w.Client.Read(msg)
 		if n == 0 {
 			log.Print(errors.New("socket was closed"))
 			break
@@ -127,7 +120,6 @@ func (w *WsWorker)handleGzip(box []byte) {
 //handle the message form hb server, unmarshal []byte to string of struct,
 // and use different
 func (w *WsWorker) unmarshalMsg(index []byte) {
-	//fmt.Printf("string index in unmarshal:%v\n",string(index))
 	sel := new(selectMsg1)
 	err := json.Unmarshal(index, sel)
 	if err != nil {
@@ -138,7 +130,6 @@ func (w *WsWorker) unmarshalMsg(index []byte) {
 			w.pong(index)
 			return
 		case len(sel.Id) > 0 && len(sel.Subbed) > 0:
-			fmt.Println("select:", sel)
 			w.subStatusHandle(index)
 			return
 		case len(sel.Ch) > 0 || len(sel.Rep) > 0:
@@ -149,17 +140,15 @@ func (w *WsWorker) unmarshalMsg(index []byte) {
 
 func (w *WsWorker) subStatusHandle(index []byte) {
 	status := new(subStatus)
-	fmt.Println("decompressed index:",string(index))
 	err := json.Unmarshal(index, status)
 	if err != nil {
 		panic(err)
 		return
 	} else {
 		w.RespCh <- []string{status.Id, status.Status, status.Subbed}
-		if status.Status != "ok" {
+		/*if status.Status != "ok" {
 			return
 		}
-		fmt.Println("status:", status)
 		result := strings.Split(status.Subbed,".")
 		st := new(subTopic)
 		if len(result) >3 {
@@ -171,7 +160,7 @@ func (w *WsWorker) subStatusHandle(index []byte) {
 			fmt.Println("result", result)
 			st.tradePare,st.kind = result[1],result[2]
 			w.subTopics = append(w.subTopics, st)
-		}
+		}*/
 	}
 }
 
@@ -184,20 +173,32 @@ func (w *WsWorker) pong(index []byte) {
 		log.Println(err)
 		return
 	}
-	_, err = w.client.Write(result)
+	_, err = w.Client.Write(result)
 	if err != nil {
 		log.Println(err)
 	}
 }
 
 //subscribe a new topic, topic parameter: []string(tradePare, kind, parameter)
-func (w *WsWorker) subNewTopic(topic *WsReq) {
+func (w *WsWorker) subNewTopic(topic string) {
+	//fmt.Printf("start sub:%v\n",topic)
+	js := map[string]string{ //other subscriptions
+		"sub": topic,
+		"id":  topic,
+	}
+	marshal, err := json.Marshal(js)
+	if err != nil {
+		log.Println(err)
+		return
+	} else {
+		w.Client.Write(marshal)
+	}
 	//[tradePare, kind, parameter]
 	//kind : 1.kline 2.depth 3.trade 4.detail
 	//parameter: 1.1min... 2.step0... 3.detail 4.nil
-	fmt.Printf("start sub:%v\n",topic)
 
-	if topic.Detail == "detail" { //sub the topic of the latest 24h market detail
+
+	/*if topic.Detail == "detail" { //sub the topic of the latest 24h market detail
 		content := fmt.Sprintf("market.%v.%v", topic.TradePare, topic.Detail)
 		js := map[string]string{
 			"sub": content,
@@ -219,32 +220,43 @@ func (w *WsWorker) subNewTopic(topic *WsReq) {
 			sub = fmt.Sprintf("market.%v.%v", topic.TradePare, topic.Kind)
 			id = fmt.Sprintf("%v.%v", topic.TradePare, topic.Kind)
 		}
-		js := map[string]string{ //other subscriptions
 
-			"sub": sub,
-			"id":  id,
-		}
-		marshal, err := json.Marshal(js)
-		if err != nil {
-			log.Println(err)
-			return
-		} else {
-			w.client.Write(marshal)
-		}
-	}
+	}*/
 }
 
 //
-func (w *WsWorker) unsubTopic(topic *WsReq) {
+func (w *WsWorker) unsubTopic(topic string) {
 
 }
 
-//request data
-func (w *WsWorker) requestDataOnce(topic *WsReq) {
+//request data 10times per second automatically
+func (w *WsWorker) requestDataOnce(topic string) {
 	//[tradePare, kind, parameter]
 	//kind : 1.kline 2.depth 3.trade 4.detail
 	//parameter: 1.1min... 2.step0... 3.detail 4.nil
-	if topic.Detail == "detail" { //request the latest 24h market detail
+	//log.Println("topic", topic)
+
+	midToSend := map[string]string{
+		"req":topic,
+		"id": topic,
+		//"from": fmt.Sprintf("%v",time.Now().Unix() -100),
+		//"to": fmt.Sprintf("%v",time.Now().Unix()-10),
+	}
+	//log.Println("mid:", midToSend)
+	if jsToSend, err := json.Marshal(midToSend); err != nil {
+		log.Println(err)
+		panic(err)
+		return
+	} else {
+		//1572920982
+		//1501174800
+		//log.Println("js to write:", string(jsToSend))
+		_, err := w.Client.Write(jsToSend)
+		if err != nil {
+			panic(err)
+		}
+	}
+	/*if topic.Detail == "detail" { //request the latest 24h market detail
 		msgToSend := fmt.Sprintf("market.%v.%v", topic.TradePare, topic.Detail)
 		midToSend := map[string]string{
 			"req": msgToSend,
@@ -261,23 +273,18 @@ func (w *WsWorker) requestDataOnce(topic *WsReq) {
 			return
 		}
 	} else { //other requests
-		msgToSend := fmt.Sprintf("market.%v.%v.%v",topic.TradePare, topic.Kind, topic.Parameter)
-		midToSend := map[string]string{
-			"req":msgToSend,
-			"id": fmt.Sprintf("%v.%v.%v",topic.TradePare, topic.Kind, topic.Parameter),
-		}
-		if jsToSend, err := json.Marshal(midToSend); err != nil {
-			log.Println(err)
-			panic(err)
-			return
+		var msgToSend string
+		if topic.Parameter == "" {
+			msgToSend = fmt.Sprintf("market.%v.%v",topic.TradePare, topic.Kind)
 		} else {
-			_, err := w.client.Write(jsToSend)
-			if err != nil {
-				panic(err)
-			}
+			msgToSend = fmt.Sprintf("market.%v.%v.%v",topic.TradePare, topic.Kind, topic.Parameter)
 		}
 
-	}
+		log.Println("msgToSend:", msgToSend)
+
+
+
+	}*/
 
 
 
@@ -285,6 +292,7 @@ func (w *WsWorker) requestDataOnce(topic *WsReq) {
 
 func (w *WsWorker) updateData(index []byte) {
 	//fmt.Printf("start updateData\n")
+	//fmt.Println("update date:", string(index))
 	upstr := new(updateDataSelect)
 	err := json.Unmarshal(index, upstr)
 	if err != nil {
@@ -306,16 +314,23 @@ func (w *WsWorker) updateData(index []byte) {
 				panic(err)
 				return
 			}
-			upKPre.Tick.TradePare, upKPre.Tick.Period = result[1], result[3]
-			w.RespCh <- upKPre.Tick
+			//upKPre.Tick.TradePare, upKPre.Tick.Period = result[1], result[3]
+			if len(upKPre.Data) <= 0  {
+				//log.Println("got tick")
+				w.RespCh <- upKPre.Tick
+			} else {
+				//log.Println("got data")
+				w.RespCh <- upKPre.Data
+			}
+
 		case "depth":
 			upDepPre := new(UpdateDepthPre)
 			err := json.Unmarshal(index,upDepPre)
 			if err != nil {
 				panic(err)
 			}
-			upDepPre.Tick.TradePare = result[1]
-			w.RespCh <- upDepPre.Tick
+			upDepPre.Data.TradePare = result[1]
+			w.RespCh <- upDepPre.Data
 
 		case "trade":
 			tradeStr := new(UpdateTradeDetailPre)
